@@ -384,7 +384,9 @@ function sendEv(id, msg, except) {
   const s = JSON.stringify(msg);
   for (const p of players.values()) if (p.ev === id && p.id !== except) conns.get(p.id)?.send(s);
 }
-const ident = (p) => ({ id: p.id, name: p.name, mode: p.mode, device: p.device, look: p.look, role: p.role, seat: p.seat });
+const ident = (p) => ({ id: p.id, name: p.name, mode: p.mode, device: p.device, look: p.look, role: p.role, seat: p.seat, face: p.face || null });
+const LOOKS = 10;
+const PLACES = ["ceremony", "cocktail", "reception", "dance", "cake"];
 const q = (n) => Math.round(n * 100) / 100;
 
 export const room = {
@@ -404,7 +406,7 @@ export const room = {
       if (inEvent(ev).length >= CAPACITY && !isHost && !isStaff) return conn.send({ type: "denied", reason: "The venue is full (40 guests)" });
       const name = room.censor(String(m.name || conn.username || "Guest")).slice(0, 24).trim() || "Guest";
       me = { id: conn.id, ev, name, mode: m.mode === "body" ? "body" : "spectator", device: String(m.device || "desktop").slice(0, 10),
-        look: Math.abs(m.look | 0) % 12, role: isHost ? "host" : isStaff ? "staff" : "guest", seat: -1, pose: null };
+        look: Math.abs(m.look | 0) % LOOKS, face: (typeof m.face === "string" && /^https:[/][/]/.test(m.face) ? m.face.slice(0, 400) : null), role: isHost ? "host" : isStaff ? "staff" : "guest", seat: -1, pose: null };
       players.set(conn.id, me);
       const e = evState(ev);
       conn.send({ type: "welcome", id: conn.id, role: me.role, players: inEvent(ev).map(ident),
@@ -418,14 +420,17 @@ export const room = {
     const e = evState(me.ev);
     const staff = me.role === "host" || me.role === "staff";
     switch (m.type) {
-      case "p": { // [x,y,z,yaw,pitch, (vr) hx,hy,hz, lx,ly,lz, rx,ry,rz]
-        if (me.mode !== "body" || !Array.isArray(m.v) || m.v.length > 14) return;
+      case "p": { // [x,y,z,yaw,pitch,flags, (vr) hx,hy,hz, lx,ly,lz, rx,ry,rz]
+        if (me.mode !== "body" || !Array.isArray(m.v) || m.v.length > 15) return;
         const v = m.v.map((n) => (Number.isFinite(+n) ? q(+n) : 0));
         if (Math.abs(v[0]) > 80 || Math.abs(v[2]) > 80 || v[1] < -2 || v[1] > 20) return;
         me.pose = v; e.dirty.add(me.id); return;
       }
       case "mode":
         me.mode = m.mode === "body" ? "body" : "spectator"; if (me.mode !== "body") me.pose = null;
+        sendEv(me.ev, { type: "ident", player: ident(me) }); return;
+      case "look":
+        me.look = Math.abs(m.look | 0) % LOOKS; me.face = (typeof m.face === "string" && /^https:[/][/]/.test(m.face) ? m.face.slice(0, 400) : null);
         sendEv(me.ev, { type: "ident", player: ident(me) }); return;
       case "chat": {
         const text = room.censor(String(m.text || "")).slice(0, 200).trim();
@@ -440,6 +445,7 @@ export const room = {
     }
     if (!staff) return;
     switch (m.type) {
+      case "gather": if (PLACES.includes(m.place)) sendEv(me.ev, { type: "gather", place: m.place, by: me.name }); break;
       case "cue": e.cue = { name: String(m.name).slice(0, 20), at: now() }; sendEv(me.ev, { type: "cue", cue: e.cue, by: me.name }); break;
       case "shot": e.shot = m.shot == null ? null : String(m.shot).slice(0, 20); sendEv(me.ev, { type: "shot", shot: e.shot }); break;
       case "screen": e.screen = m.url ? String(m.url).slice(0, 500) : null; sendEv(me.ev, { type: "screen", url: e.screen }); break;

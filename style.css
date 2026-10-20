@@ -153,3 +153,23 @@ body.cinema #brand, body.cinema #shot { opacity: 0; transition: opacity .6s; }
   #brand .word { display: none; }
   .gate .names { font-size: 32px; }
 }
+
+/* ---------- look editor ---------- */
+.look { display: grid; gap: 12px; }
+.look-top { position: relative; height: 300px; border-radius: 18px; overflow: hidden; background: radial-gradient(120% 90% at 50% 20%, #fbf3ea, #e8d8c6); }
+.look-3d { width: 100%; height: 100%; display: block; }
+.look-cam { position: absolute; inset: 0; background: #000; }
+.look-cam video { width: 100%; height: 100%; object-fit: cover; transform: scaleX(-1); }
+.look-oval { position: absolute; left: 50%; top: 47%; width: 46%; aspect-ratio: 3/4; transform: translate(-50%, -50%); border: 2px dashed rgba(255,255,255,.85); border-radius: 50%; box-shadow: 0 0 0 999px rgba(0,0,0,.35); }
+.look-msg { position: absolute; left: 0; right: 0; bottom: 12px; text-align: center; color: #fff; font-weight: 600; text-shadow: 0 1px 4px rgba(0,0,0,.6); }
+.look-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.look-actions .btn { flex: 1; text-align: center; cursor: pointer; }
+.look-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(62px, 1fr)); gap: 8px; }
+.look-opt { padding: 0; border: 2px solid transparent; border-radius: 12px; overflow: hidden; background: #efe6da; cursor: pointer; aspect-ratio: 150/256; }
+.look-opt img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.look-opt.on { border-color: var(--gold, #b98a52); box-shadow: 0 0 0 3px rgba(185,138,82,.25); }
+.look-row { display: flex; align-items: center; gap: 12px; width: 100%; margin-top: 12px; padding: 8px 12px 8px 8px; border-radius: 14px; border: 1px solid rgba(0,0,0,.08); background: rgba(255,255,255,.6); cursor: pointer; text-align: left; font: inherit; color: inherit; }
+.look-row img { width: 40px; height: 64px; object-fit: cover; border-radius: 8px; }
+.look-row > span:nth-child(2) { flex: 1; display: grid; }
+.small { font-size: 12px; }
+.places { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; margin-bottom: 8px; }

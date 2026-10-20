@@ -11,9 +11,14 @@ export const SHOTS = {
   crane:  { label: "Crane",   fn: (t) => { const a = t * 0.08; return { p: V(Math.sin(a) * 18, 9 + Math.sin(t * 0.07) * 2, -4 + Math.cos(a) * 18), l: V(0, 0.8, -3) }; } },
   guests: { label: "Guests",  fn: (t) => ({ p: V(Math.sin(t * 0.06) * 2.5, 2.6, -8.5), l: V(0, 1, 4) }) },
   aerial: { label: "Aerial",  fn: (t) => { const a = t * 0.03; return { p: V(Math.sin(a) * 4, 26, 2 + Math.cos(a) * 4), l: V(0, 0, 0) }; } },
-  dance:  { label: "Party",   fn: (t) => { const a = t * 0.15; return { p: V(Math.sin(a) * 7, 2.8, 23 + Math.cos(a) * 7), l: V(0, 1, 23) }; } },
+  terrace:{ label: "Terrace", fn: (t) => { const a = t * 0.07; return { p: V(-12 + Math.sin(a) * 7, 2.6, 13 + Math.cos(a) * 7), l: V(-12, 1, 13) }; } },
+  tent:   { label: "Reception", fn: (t) => ({ p: V(Math.sin(t * 0.05) * 5, 3.6, 22.5), l: V(0, 1.2, 37) }) },
+  dance:  { label: "Dance floor", fn: (t) => { const a = t * 0.15; return { p: V(Math.sin(a) * 5.5, 2.4, 33 + Math.cos(a) * 4.5), l: V(0, 1.1, 33) }; } },
+  cake:   { label: "Cake", fn: (t) => ({ p: V(-5.2 + Math.sin(t * 0.1) * 0.5, 1.6, 39.4), l: V(-6.5, 1.15, 41.2) }) },
 };
-export const SHOT_ORDER = ["wide", "aisle", "crane", "altar", "guests", "aerial", "dance"];
+export const SHOT_ORDER = ["wide", "aisle", "crane", "altar", "guests", "aerial", "terrace", "tent", "dance", "cake"];
+// which shots belong to which part of the day (auto-director stays in the active zone)
+export const ZONE_SHOTS = { ceremony: ["wide", "aisle", "crane", "altar", "guests"], cocktail: ["terrace", "aerial", "wide"], reception: ["tent", "dance", "cake", "aerial"], dance: ["dance", "tent"], cake: ["cake", "tent", "dance"] };
 
 export class Spectator {
   constructor(camera, dom) {
@@ -50,7 +55,8 @@ export class Spectator {
     this.blend = instant ? 1 : 0; this.shot = name; this.held = 0;
     this.onchange(name);
   }
-  next(dir = 1) { const i = SHOT_ORDER.indexOf(this.shot); this.cut(SHOT_ORDER[(i + dir + SHOT_ORDER.length) % SHOT_ORDER.length]); }
+  next(dir = 1) { const O = (this.zone && ZONE_SHOTS[this.zone]) || SHOT_ORDER; const i = O.indexOf(this.shot); this.cut(O[(i + dir + O.length) % O.length]); }
+  setZone(z) { this.zone = z; if (!this.forced && ZONE_SHOTS[z]) this.cut(ZONE_SHOTS[z][0]); }
   force(name) { this.forced = name; if (name) this.cut(name); }
   update(dt) {
     this.t += dt; this.held += dt; this.idle += dt;

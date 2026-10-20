@@ -1,7 +1,8 @@
 import { api, esc, fmtDur, eventUrl } from "../api.js";
 import { SHOTS, SHOT_ORDER } from "../engine/spectator.js";
 import { REACTIONS } from "../engine/fx.js";
-import { PALETTES } from "../engine/venue.js";
+import { PALETTES, PLACES } from "../engine/venue.js";
+import { loadPrefs, openLook } from "./look.js";
 import { inviteUrl, rotateSandboxToken } from "../net/sandbox.js";
 import { idbGet, idbSet } from "../net/idb.js";
 import { isTV, vrSupported } from "../device.js";
@@ -23,7 +24,8 @@ export function startHud(ctx, o) {
   function topLine() {
     const n = roster.size, title = o.booking?.couple_names || "Rehearsal";
     let when = "";
-    if (sandbox && o.kind === "sandbox-host") when = "Sandbox · " + fmtDur(sbLeft) + " left";
+    if (o.admin) when = "Admin sandbox · unlimited";
+    else if (sandbox && o.kind === "sandbox-host") when = "Sandbox · " + fmtDur(sbLeft) + " left";
     else if (sandbox) when = "Sandbox";
     else if (endsAt) { const s = (endsAt - Date.now()) / 1000; when = s > 0 ? "Live · " + fmtDur(s) + " left" : "Closing"; }
     top.innerHTML = "<b>" + esc(title) + "</b><span class='muted'>· " + when + " · 👥 " + n + "</span>";
@@ -34,7 +36,7 @@ export function startHud(ctx, o) {
   }, 15000));
 
   // Sandbox metering: heartbeat every 60s; stops when hours run out.
-  if (o.kind === "sandbox-host") timers.push(setInterval(async () => {
+  if (o.kind === "sandbox-host" && !o.admin) timers.push(setInterval(async () => {
     const r = await api("/api/sandbox/tick", { booking_id: bid });
     if (r.error) return;
     sbLeft = r.remaining; topLine();
@@ -57,13 +59,25 @@ export function startHud(ctx, o) {
     }
     for (const [k, e] of Object.entries(REACTIONS)) b(e, () => world.react(k), "emo", k);
     sep();
+    b("📍", openPlaces, "", "Go to…");
     if (!isTV) b("💬", openChat, "", "Chat (Enter)");
+    if (!isTV) b("👤", changeLook, "", "Your look");
     b("📖", openGuestbook, "", "Guestbook");
     if (staff) b("Host", openHost, "primary");
     b("Leave", () => end(), "");
   }
   function setMode(m) { world.setMode(m); renderDock(); }
   const off = world.on({ mode: () => !ended && renderDock(), vr: () => !ended && renderDock() });
+
+  // ---------- places + look ----------
+  function openPlaces() {
+    const el = ctx.openSheet('<h2>Go to</h2><div class="places">' + Object.entries(PLACES).map(([k, p]) => '<button class="btn' + (world.zone === k ? " primary" : "") + '" data-pl="' + k + '">' + p.label + "</button>").join("") + "</div>");
+    el.querySelectorAll("[data-pl]").forEach((x) => (x.onclick = () => { world.goPlace(x.dataset.pl); ctx.closeSheet(); }));
+  }
+  async function changeLook() {
+    const p = await openLook(ctx, await loadPrefs(ctx));
+    o.transport.send({ type: "look", look: p.look, face: p.face });
+  }
 
   // ---------- chat ----------
   function addMsg(from, text, role) {
@@ -110,6 +124,7 @@ export function startHud(ctx, o) {
     const guests = [...roster.values()].filter((p) => p.id !== world.me);
     const el = ctx.openSheet(`<h2>Host controls</h2>
       <p>${sandbox ? "Rehearsal — everything here works the same on the day." : "Everything you trigger plays for every guest."}</p>
+      <h3>Move everyone to</h3><div class="places">${Object.entries(PLACES).map(([k, p]) => '<button class="btn" data-gather="' + k + '">' + p.label + "</button>").join("")}</div>
       <h3>Moments</h3><div class="cues">${CUES.map(([k, i, l]) => '<button data-cue="' + k + '"><span>' + i + "</span>" + l + "</button>").join("")}</div>
       <h3>Cameras for watchers</h3>
       <div class="seg" id="h-shots"><button data-shot="" class="${world.spectator.forced ? "" : "on"}">Auto</button>${SHOT_ORDER.map((s) => '<button data-shot="' + s + '" class="' + (world.spectator.forced === s ? "on" : "") + '">' + SHOTS[s].label + "</button>").join("")}</div>
@@ -121,7 +136,7 @@ export function startHud(ctx, o) {
       <div class="row"><div class="seg" id="h-pal">${Object.keys(PALETTES).map((k) => '<button data-pal="' + k + '" class="' + ((config.palette || "blush") === k ? "on" : "") + '">' + k[0].toUpperCase() + k.slice(1) + "</button>").join("")}</div>
         <div class="seg" id="h-time"><button data-time="golden" class="${config.time !== "evening" ? "on" : ""}">Golden hour</button><button data-time="evening" class="${config.time === "evening" ? "on" : ""}">Evening</button></div></div>
       <label class="field">Sign<input id="h-names" maxlength="40" value="${esc(config.names || o.booking?.couple_names || "")}"></label>
-      ${o.kind === "sandbox-host" ? '<div class="row"><button class="btn primary" id="h-save">Save style for the event day</button></div>' : ""}
+      ${o.kind === "sandbox-host" && !o.admin ? '<div class="row"><button class="btn primary" id="h-save">Save style for the event day</button></div>' : ""}
       <h3>${sandbox ? "Invite to rehearsal" : "Guest link"}</h3>
       <div class="copy"><input id="h-link" readonly value=""><button class="btn small" id="h-copy">Copy</button>${o.kind === "sandbox-host" ? '<button class="btn small" id="h-rot" title="Old links stop working after you reopen the sandbox">New link</button>' : ""}</div>
       <h3>Guests (${guests.length})</h3>
@@ -129,6 +144,7 @@ export function startHud(ctx, o) {
       ${o.booking?.staff_notes && o.role === "staff" ? "<h3>Staff notes</h3><p style='white-space:pre-wrap'>" + esc(o.booking.staff_notes) + "</p>" : ""}`);
     const link = el.querySelector("#h-link");
     if (o.kind === "sandbox-host") link.value = inviteUrl(o.transport.session); else link.value = bid ? eventUrl(bid) : location.href;
+    el.querySelectorAll("[data-gather]").forEach((b) => (b.onclick = () => { o.transport.send({ type: "gather", place: b.dataset.gather }); if (sandbox) world.goPlace(b.dataset.gather); ctx.closeSheet(); }));
     el.querySelectorAll("[data-cue]").forEach((b) => (b.onclick = () => o.transport.send({ type: "cue", name: b.dataset.cue })));
     el.querySelectorAll("[data-shot]").forEach((b) => (b.onclick = () => { o.transport.send({ type: "shot", shot: b.dataset.shot || null }); el.querySelectorAll("[data-shot]").forEach((x) => x.classList.toggle("on", x === b)); }));
     el.querySelector("#h-seat").onclick = () => { o.transport.send({ type: "seat", locked: !seated }); ctx.closeSheet(); };
@@ -166,6 +182,7 @@ export function startHud(ctx, o) {
     if (m.type === "join") addMsg("✦", m.player.name + " arrived");
     if (m.type === "chat") addMsg(m.from, m.text, m.role);
     if (m.type === "cue") addMsg("✦", (CUES.find((c) => c[0] === m.cue.name)?.[2] || m.cue.name) + (m.by ? " · " + m.by : ""));
+    if (m.type === "gather") addMsg("✦", (m.by || "Host") + " invites everyone to the " + (PLACES[m.place]?.label || m.place).toLowerCase());
     if (m.type === "seats") { seated = m.locked; if (world.controls.locked) ctx.toast("The host has seated everyone"); }
     if (m.type === "config") config = { ...config, ...m.config };
     if (m.type === "gb") {
@@ -177,7 +194,7 @@ export function startHud(ctx, o) {
   function end(why) {
     if (ended) return; ended = true;
     timers.forEach(clearInterval); removeEventListener("keydown", onKey); off();
-    if (o.kind === "sandbox-host") api("/api/sandbox/tick", { booking_id: bid, stop: true });
+    if (o.kind === "sandbox-host" && !o.admin) api("/api/sandbox/tick", { booking_id: bid, stop: true });
     ctx.closeSheet(); hudEl.innerHTML = "";
     if (why) ctx.toast(why, 4000);
     ctx.home();

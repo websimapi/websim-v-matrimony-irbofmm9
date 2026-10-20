@@ -4,17 +4,13 @@ import { hostSandbox, joinSandbox } from "../net/sandbox.js";
 import { idbGet, idbSet } from "../net/idb.js";
 import { device, isTV, vrSupported } from "../device.js";
 import { startHud } from "./hud.js";
-
-const LOOK_KEY = "guest:prefs";
-async function prefs(ctx) {
-  const p = (await idbGet(LOOK_KEY).catch(() => null)) || {};
-  return { name: p.name || ctx.user?.username || "", look: p.look ?? Math.floor(Math.random() * 12) };
-}
+import { loadPrefs, savePrefs, openLook } from "./look.js";
+import { AVATARS } from "../engine/humans.js";
 
 // Gate: pick a name and Walk / Watch. Resolves { name, look, mode, vr }.
 async function gate(ctx, { title, names, sub, canEnter, reason, waitUntil }) {
   const vr = await vrSupported();
-  const p = await prefs(ctx);
+  let p = await loadPrefs(ctx);
   return new Promise((resolve) => {
     const render = () => {
       const el = ctx.openSheet(`<div class="gate">
@@ -23,6 +19,7 @@ async function gate(ctx, { title, names, sub, canEnter, reason, waitUntil }) {
         <div class="muted">${esc(sub)}</div>
         ${canEnter ? `
           <label class="field" style="text-align:left;margin-top:16px">Your name<input id="g-name" maxlength="24" value="${esc(p.name)}" placeholder="How guests will see you"></label>
+          <button class="look-row" id="g-look"><img src="assets/avatars/${AVATARS[p.look].id}/thumb.jpg" alt=""><span><b>Your look</b><span class="muted">${esc(AVATARS[p.look].label)}${p.face ? " · your face" : p.faceData ? " · face (only you)" : ""}</span></span><span class="muted">Change</span></button>
           <div class="choices">
             ${isTV ? "" : '<button class="choice" data-m="body"><span class="i">🚶</span><b>Walk in</b><span class="muted">Take a seat, move around</span></button>'}
             <button class="choice" data-m="spectator" ${isTV ? 'style="grid-column:1/-1"' : ""}><span class="i">🎥</span><b>Watch</b><span class="muted">Directed cameras, no controls</span></button>
@@ -33,11 +30,15 @@ async function gate(ctx, { title, names, sub, canEnter, reason, waitUntil }) {
       </div>`, { close: () => { if (!done) ctx.home(); } });
       el.querySelectorAll("[data-m]").forEach((b) => (b.onclick = async () => {
         const name = (el.querySelector("#g-name")?.value || "").trim() || "Guest";
-        done = true; await idbSet(LOOK_KEY, { name, look: p.look }).catch(() => {});
+        done = true; p.name = name; await savePrefs(p);
         ctx.closeSheet();
-        resolve({ name, look: p.look, mode: b.dataset.m === "spectator" ? "spectator" : "body", vr: b.dataset.m === "vr" });
+        resolve({ name, look: p.look, face: p.face, mode: b.dataset.m === "spectator" ? "spectator" : "body", vr: b.dataset.m === "vr" });
       }));
       el.querySelector("#g-home")?.addEventListener("click", () => ctx.closeSheet());
+      el.querySelector("#g-look")?.addEventListener("click", async () => {
+        p.name = (el.querySelector("#g-name")?.value || "").trim() || p.name;
+        p = await openLook(ctx, p); render();
+      });
       if (isTV) el.querySelector(".choice")?.focus();
       if (waitUntil) {
         const cd = el.querySelector("#g-cd");
@@ -60,7 +61,7 @@ export async function enterEvent(ctx, id) {
   const canEnter = r.venue.open || r.role === "staff";
   const g = await gate(ctx, { title: staff ? (r.role === "host" ? "Your wedding venue" : "Staff entry") : "You're invited to the wedding of",
     names: b.couple_names, sub: dateLine(b), canEnter, reason: r.venue.reason, waitUntil: r.venue.opensAt });
-  const join = { type: "join", event: id, name: g.name, look: g.look, mode: g.mode, device };
+  const join = { type: "join", event: id, name: g.name, look: g.look, face: g.face, mode: g.mode, device };
   let hud;
   const t = await connectRealm(join, {
     message: (m) => { ctx.world.handle(m); hud?.message(m); },
@@ -84,7 +85,7 @@ export async function enterSandboxHost(ctx, id) {
     sub: tick.error ? "" : fmtDur(tick.remaining) + " of rehearsal time left · not the live venue",
     canEnter: !tick.error && tick.remaining > 0, reason: tick.error || "All 10 sandbox hours have been used." });
   let hud;
-  const join = { type: "join", name: g.name, look: g.look, mode: g.mode, device };
+  const join = { type: "join", name: g.name, look: g.look, face: g.face, mode: g.mode, device };
   let t;
   try {
     t = await hostSandbox(id, join, {
@@ -103,11 +104,36 @@ export async function enterSandboxGuest(ctx, peerId, token) {
   const g = await gate(ctx, { title: "You're invited to a rehearsal", names: "Wedding sandbox", sub: "A private practice run hosted by the couple", canEnter: true });
   let hud;
   try {
-    const t = await joinSandbox(peerId, token, { type: "join", name: g.name, look: g.look, mode: g.mode, device }, {
+    const t = await joinSandbox(peerId, token, { type: "join", name: g.name, look: g.look, face: g.face, mode: g.mode, device }, {
       message: (m) => { ctx.world.handle(m); hud?.message(m); },
       close: (why) => { ctx.toast(why); hud?.end(); },
     });
     ctx.world.attach(t);
     hud = startHud(ctx, { kind: "sandbox-guest", booking: null, role: "guest", transport: t, mode: g.mode, vr: g.vr });
   } catch (e) { ctx.toast(e.message || "Could not join"); ctx.home(); }
+}
+
+// Admin test venue: no booking, no date, no metering. Same LocalDomain + PeerJS
+// sandbox as rehearsals, so staff can try every control and invite testers.
+export async function enterAdminSandbox(ctx) {
+  if (!ctx.isAdmin) { ctx.toast("Admins only"); return ctx.home(); }
+  ctx.dock.innerHTML = "";
+  history.replaceState(null, "", "?sandbox=admin");
+  const id = "ADMIN-" + String(ctx.user?.username || "staff").toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 16);
+  const draft = (await idbGet("draft:" + id).catch(() => null)) || {};
+  const cfg = { names: "Test Venue", ...draft };
+  ctx.world.venue.applyConfig(cfg);
+  const g = await gate(ctx, { title: "Admin sandbox", names: "Test Venue", sub: "Unlimited testing · no booking needed · not a live event", canEnter: true });
+  let hud, t;
+  const join = { type: "join", name: g.name, look: g.look, face: g.face, mode: g.mode, device };
+  try {
+    t = await hostSandbox(id, join, {
+      message: (m) => { ctx.world.handle(m); hud?.message(m); },
+      peers: (n) => hud?.peers(n),
+      error: (e) => ctx.toast("Sandbox: " + (e.message || e.type)),
+    });
+  } catch (e) { ctx.toast(e.message); return ctx.home(); }
+  ctx.world.attach(t);
+  t.send({ type: "config", config: cfg });
+  hud = startHud(ctx, { kind: "sandbox-host", admin: true, booking: { id, couple_names: "Admin sandbox" }, role: "host", transport: t, mode: g.mode, vr: g.vr, config: cfg });
 }

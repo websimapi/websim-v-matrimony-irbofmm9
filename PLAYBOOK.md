@@ -97,6 +97,7 @@ No staff action is required at any step.
 - **Admins**: the project owner is always an admin. Grant others in **Admin → Admins** by @username; they get the panel and staff entry to every venue.
 - **Payments**: *Scan tip comments* re-matches every tip that contains a booking code. Use *Record a payment* for off-platform payments.
 - **Overrides** for each booking: force open, waive balance, move the date (conflicts are rejected), extra hours, cancel/restore.
+- **Admin sandbox** (dock → *Sandbox*, Admin → Overview, or `?sandbox=admin`): an unmetered test venue with full host controls and invite links. It needs no booking or date.
 - **Live now**: shows the walking/watching counts for any open venue.
 
 ## 8. Capacity and performance budget

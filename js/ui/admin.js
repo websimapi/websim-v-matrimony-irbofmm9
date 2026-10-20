@@ -26,6 +26,7 @@ export async function openAdmin(ctx, tab = "Overview") {
           <div><b>${liveIds.length}</b><span class="muted">Venues live now</span></div>
         </div>
         ${liveIds.length ? "<h3>Live now</h3>" + liveIds.map((id) => '<div class="row card"><b class="grow">' + id + "</b><span>" + d.live[id].bodies + " walking · " + d.live[id].spectators + ' watching</span><a class="btn small primary" href="?e=' + id + '" style="text-decoration:none">Join as staff</a></div>').join("") : ""}
+        <div class="row card"><span class="grow"><b>Admin sandbox</b><div class="muted">Test the venue any time — no booking or date needed.</div></span><button class="btn small primary" id="adm-sb">Open sandbox</button></div>
         <h3>Next up</h3>
         ${next ? bookingCard(next) : '<p class="muted">No upcoming events.</p>'}
         ${d.projectId ? "" : '<p class="muted">Tip verification activates once the owner has opened the page (project id not stored yet).</p>'}`;
@@ -117,6 +118,7 @@ export async function openAdmin(ctx, tab = "Overview") {
     root.querySelectorAll("[data-edit]").forEach((b) => (b.onclick = () => edit(b.dataset.edit)));
     root.querySelectorAll("[data-ok]").forEach((b) => (b.onclick = () => act("/api/admin/payment", { verify_id: +b.dataset.ok })));
     root.querySelectorAll("[data-no]").forEach((b) => (b.onclick = () => act("/api/admin/payment", { verify_id: +b.dataset.no, reject: true })));
+    root.querySelector("#adm-sb")?.addEventListener("click", () => { ctx.closeSheet(); ctx.adminSandbox(); });
     root.querySelector("#sync")?.addEventListener("click", async () => { const r = await api("/api/admin/sync-tips", {}); ctx.toast(r.error || "Matched " + r.matched + " of " + r.scanned + " tips"); reload(); });
     root.querySelector("#bb")?.addEventListener("click", () => act("/api/admin/block", { date: root.querySelector("#bd").value, reason: root.querySelector("#br").value }));
     root.querySelectorAll("[data-unb]").forEach((b) => (b.onclick = () => act("/api/admin/block", { date: b.dataset.unb }, "DELETE")));
