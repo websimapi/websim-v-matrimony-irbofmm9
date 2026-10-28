@@ -2,12 +2,17 @@ import { api, esc, fmtDur, eventUrl } from "../api.js";
 import { SHOTS, SHOT_ORDER } from "../engine/spectator.js";
 import { REACTIONS } from "../engine/fx.js";
 import { PALETTES, PLACES } from "../engine/venue.js";
-import { loadPrefs, openLook } from "./look.js";
+import { loadPrefs, savePrefs, openLook } from "./look.js";
 import { inviteUrl, rotateSandboxToken } from "../net/sandbox.js";
 import { idbGet, idbSet } from "../net/idb.js";
 import { isTV, vrSupported } from "../device.js";
+import { openEditor } from "../editor/editor.js";
+import { openCreator } from "./creator.js";
+import { packSpec } from "../engine/avatar-spec.js";
 
-const CUES = [["processional", "🎻", "Processional"], ["petals", "🌸", "Petals"], ["sparklers", "✨", "Sparklers"], ["kiss", "💋", "The kiss"], ["applause", "👏", "Applause"]];
+const CUES = [["processional", "🎻", "Processional"], ["rings", "💍", "Ring exchange"], ["kiss", "💋", "The kiss"], ["pronounce", "🕊", "Pronounced"], ["applause", "👏", "Applause"],
+  ["petals", "🌸", "Petals"], ["sparklers", "✨", "Sparklers"], ["bouquet", "💐", "Bouquet toss"], ["firstdance", "💃", "First dance"], ["cake", "🍰", "Cake cutting"],
+  ["bubbles", "🫧", "Bubble send-off"], ["lanterns", "🏮", "Sky lanterns"]];
 
 export function startHud(ctx, o) {
   const { world, dock } = ctx;
@@ -27,8 +32,11 @@ export function startHud(ctx, o) {
     if (o.admin) when = "Admin sandbox · unlimited";
     else if (sandbox && o.kind === "sandbox-host") when = "Sandbox · " + fmtDur(sbLeft) + " left";
     else if (sandbox) when = "Sandbox";
-    else if (endsAt) { const s = (endsAt - Date.now()) / 1000; when = s > 0 ? "Live · " + fmtDur(s) + " left" : "Closing"; }
-    top.innerHTML = "<b>" + esc(title) + "</b><span class='muted'>· " + when + " · 👥 " + n + "</span>";
+    else if (endsAt) { const s = (endsAt - Date.now()) / 1000; when = s > 86400 ? "Live" : s > 0 ? "Live · " + fmtDur(s) + " left" : "Closing"; }
+    const link = world.link, natives = [...roster.values()].filter((p) => p.role === "native").length;
+    // guests only hear about desktop attendees; the technical link state is for the host and staff
+    const linkText = o.kind !== "realm" || !link ? "" : staff ? (link.mode === "bridged" ? " · 🔗 desktop linked" + (natives ? " (" + natives + ")" : "") : link.mode === "reconnecting" ? " · 🔗 reconnecting" : "") : natives ? " · 🖥 " + natives + " on the desktop app" : "";
+    top.innerHTML = "<b>" + esc(title) + "</b><span class='muted'>· " + when + " · 👥 " + n + "<span class='link-chip'>" + esc(linkText) + "</span></span>";
   }
   timers.push(setInterval(() => {
     topLine();
@@ -63,6 +71,7 @@ export function startHud(ctx, o) {
     if (!isTV) b("💬", openChat, "", "Chat (Enter)");
     if (!isTV) b("👤", changeLook, "", "Your look");
     b("📖", openGuestbook, "", "Guestbook");
+    if (canEdit) b("🛠 Edit venue", editVenue, "", "Build mode (B)");
     if (staff) b("Host", openHost, "primary");
     b("Leave", () => end(), "");
   }
@@ -75,8 +84,16 @@ export function startHud(ctx, o) {
     el.querySelectorAll("[data-pl]").forEach((x) => (x.onclick = () => { world.goPlace(x.dataset.pl); ctx.closeSheet(); }));
   }
   async function changeLook() {
-    const p = await openLook(ctx, await loadPrefs(ctx));
-    o.transport.send({ type: "look", look: p.look, face: p.face });
+    let p = await loadPrefs(ctx);
+    hudEl.hidden = true; dock.hidden = true;
+    openCreator(ctx, { spec: p.spec || { base: p.look }, name: p.name,
+      onDone: async ({ spec, name, faceScan }) => {
+        hudEl.hidden = false; dock.hidden = false;
+        p.spec = spec; p.look = spec.base; if (name) p.name = name; await savePrefs(p);
+        if (faceScan) p = await openLook(ctx, p);
+        o.transport.send({ type: "look", look: p.look, face: p.face, av: packSpec(p.spec) });
+      },
+      onCancel: () => { hudEl.hidden = false; dock.hidden = false; } });
   }
 
   // ---------- chat ----------
@@ -96,7 +113,20 @@ export function startHud(ctx, o) {
     inp.onblur = () => setTimeout(close, 150);
     inp.onkeydown = (e) => { if (e.key === "Escape") close(); e.stopPropagation(); };
   }
-  const onKey = (e) => { if (e.key === "Enter" && !e.target.closest?.("input,textarea") && !isTV) { e.preventDefault(); openChat(); } };
+  const onKey = (e) => {
+    if (world.editor || e.target.closest?.("input,textarea")) return;
+    if (e.key === "Enter" && !isTV) { e.preventDefault(); openChat(); }
+    if ((e.key === "b" || e.key === "B") && canEdit && !ctx.sheetOpen?.()) { e.preventDefault(); editVenue(); }
+  };
+  // Build mode: sandbox rehearsals (host and admin) can rearrange and decorate the venue
+  const canEdit = o.kind === "sandbox-host" && !isTV;
+  let editor = null;
+  function editVenue() {
+    if (editor) return;
+    ctx.closeSheet(); hudEl.hidden = true; dock.hidden = true;
+    editor = openEditor(ctx, { config, save: setConfig, palettes: Object.keys(PALETTES) });
+    editor.onclose = () => { editor = null; hudEl.hidden = false; dock.hidden = false; renderDock(); };
+  }
   addEventListener("keydown", onKey);
 
   // ---------- guestbook ----------
@@ -134,11 +164,13 @@ export function startHud(ctx, o) {
       <div class="copy"><input id="h-scr" placeholder="Image or .mp4 URL for the screen" value="${esc(config.screen || "")}"><button class="btn small" id="h-scr-go">Show</button></div>
       <h3>Venue style</h3>
       <div class="row"><div class="seg" id="h-pal">${Object.keys(PALETTES).map((k) => '<button data-pal="' + k + '" class="' + ((config.palette || "blush") === k ? "on" : "") + '">' + k[0].toUpperCase() + k.slice(1) + "</button>").join("")}</div>
-        <div class="seg" id="h-time"><button data-time="golden" class="${config.time !== "evening" ? "on" : ""}">Golden hour</button><button data-time="evening" class="${config.time === "evening" ? "on" : ""}">Evening</button></div></div>
+        <div class="seg" id="h-time">${[["live", "Live sky"], ["ceremony", "Ceremony time"], ["golden", "Golden hour"], ["evening", "Evening"]].map(([k, l]) => '<button data-time="' + k + '" class="' + ((config.time || "live") === k ? "on" : "") + '">' + l + "</button>").join("")}</div></div>
+      <p class="muted" style="margin:6px 0 0">${esc(world.venue.sky.state.phase)} · sun ${Math.round(world.venue.sky.state.sunAlt * 57.3)}° · local sky for your time zone</p>
       <label class="field">Sign<input id="h-names" maxlength="40" value="${esc(config.names || o.booking?.couple_names || "")}"></label>
       ${o.kind === "sandbox-host" && !o.admin ? '<div class="row"><button class="btn primary" id="h-save">Save style for the event day</button></div>' : ""}
       <h3>${sandbox ? "Invite to rehearsal" : "Guest link"}</h3>
       <div class="copy"><input id="h-link" readonly value=""><button class="btn small" id="h-copy">Copy</button>${o.kind === "sandbox-host" ? '<button class="btn small" id="h-rot" title="Old links stop working after you reopen the sandbox">New link</button>' : ""}</div>
+      ${o.kind === "realm" ? `<h3>Desktop bridge</h3><div class="row"><span class="muted">${world.link?.mode === "bridged" ? "Linked to " + esc(world.link.domain) : world.link?.mode === "reconnecting" ? "Bridge reconnecting…" : "Standalone: Websim guests only. Start a bridge on a desktop to add native Vircadia guests."}</span><button class="btn small" id="h-bridge">Open bridge</button></div>` : ""}
       <h3>Guests (${guests.length})</h3>
       ${guests.map((p) => '<div class="guest-row"><b class="grow">' + esc(p.name) + ' <span class="dev">' + esc(p.device) + " · " + (p.mode === "body" ? "walking" : "watching") + (p.role !== "guest" ? " · " + p.role : "") + "</span></b>" + (p.role === "guest" ? '<button class="btn small danger" data-kick="' + p.id + '">Remove</button>' : "") + "</div>").join("") || '<p class="muted">No one else yet.</p>'}
       ${o.booking?.staff_notes && o.role === "staff" ? "<h3>Staff notes</h3><p style='white-space:pre-wrap'>" + esc(o.booking.staff_notes) + "</p>" : ""}`);
@@ -156,9 +188,10 @@ export function startHud(ctx, o) {
     el.querySelector("#h-copy").onclick = async () => { await navigator.clipboard?.writeText(link.value); ctx.toast("Link copied"); };
     el.querySelector("#h-rot")?.addEventListener("click", async () => { await rotateSandboxToken(bid); ctx.toast("New link ready — reopen the sandbox to apply it"); });
     el.querySelector("#h-save")?.addEventListener("click", async () => { const r = await api("/api/bookings/" + bid + "/config", { config: strip(config) }); ctx.toast(r.error || "Saved — your guests will see this style on the day"); });
+    el.querySelector("#h-bridge")?.addEventListener("click", () => { const u = new URL(location.href); u.search = "?bridge=" + bid; window.open(u, "vmatrimony-bridge"); });
     el.querySelectorAll("[data-kick]").forEach((b) => (b.onclick = () => { o.transport.send({ type: "kick", id: b.dataset.kick }); b.closest(".guest-row").remove(); }));
   }
-  const strip = (c) => ({ palette: c.palette, time: c.time, names: c.names, screen: c.screen });
+  const strip = (c) => ({ palette: c.palette, time: c.time, names: c.names, screen: c.screen, layout: c.layout, env: c.env, surfaces: c.surfaces });
   function setConfig(patch) {
     config = { ...config, ...patch };
     const full = { ...config, date: o.booking?.start_utc };
@@ -179,7 +212,8 @@ export function startHud(ctx, o) {
       if (o.mode === "body" && !isTV) ctx.toast(world.renderer.xr.isPresenting ? "" : matchMedia("(pointer: coarse)").matches ? "Left stick to move · drag to look" : "WASD to move · drag to look · Enter to chat", 4000);
     }
     if (m.type === "join" || m.type === "left" || m.type === "ident") { roster = world.roster; topLine(); }
-    if (m.type === "join") addMsg("✦", m.player.name + " arrived");
+    if (m.type === "link") { topLine(); addMsg("✦", m.link.mode === "bridged" ? "Desktop guests can now join from Vircadia" : m.link.mode === "reconnecting" ? "Desktop bridge reconnecting" : "Desktop bridge closed — venue continues on Websim"); }
+    if (m.type === "join") addMsg("✦", m.player.name + (m.player.role === "native" ? " arrived from the desktop app" : " arrived"));
     if (m.type === "chat") addMsg(m.from, m.text, m.role);
     if (m.type === "cue") addMsg("✦", (CUES.find((c) => c[0] === m.cue.name)?.[2] || m.cue.name) + (m.by ? " · " + m.by : ""));
     if (m.type === "gather") addMsg("✦", (m.by || "Host") + " invites everyone to the " + (PLACES[m.place]?.label || m.place).toLowerCase());

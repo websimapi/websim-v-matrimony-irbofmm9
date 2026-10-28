@@ -162,7 +162,7 @@ No staff action is required at any step.
 
 ## 9. Assets and licensing
 
-- Avatars: Microsoft Rocketbox (MIT).
+- Avatars: Microsoft Rocketbox (MIT). Desktop HD albedo maps use the original 2048² body/head textures from commit `0943055db6ec570bcef9f2c8b41c9e5467c808f9` in `assets/avatars_hd/` (JPEG quality 85, 20 maps, about 11.3 MB). Original light-tier maps, normal maps and opacity remain in `assets/avatars/`; the MIT license is included with the HD maps. Source: https://github.com/microsoft/Microsoft-Rocketbox .
 - Furniture models in `assets/models`: Poly Haven (CC0).
 - Props in `assets/props` and 3D trees in `assets/trees3d`: generated for this project in Blender from code (`work/blender/props.py`, `trees.py`). Catalog thumbnails are rendered by the same scripts (`assets/catalog`).
 - HD textures in `assets/hd`: Poly Haven (CC0) for stone, walnut, planks, linen, parquet, satin and bark; ambientCG (CC0) Grass004 lawn.
