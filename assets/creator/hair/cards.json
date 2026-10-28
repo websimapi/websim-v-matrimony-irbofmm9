@@ -1,0 +1,74 @@
+[
+  {
+    "id": "hc-bun",
+    "label": "Low bun",
+    "eye": [
+      0,
+      0.02,
+      -0.095
+    ],
+    "triangles": 1644,
+    "bytes": 70496,
+    "atlas": "strand-atlas.png"
+  },
+  {
+    "id": "hc-braid",
+    "label": "Long braid",
+    "eye": [
+      0,
+      0.02,
+      -0.095
+    ],
+    "triangles": 1200,
+    "bytes": 51772,
+    "atlas": "strand-atlas.png"
+  },
+  {
+    "id": "hc-pixie",
+    "label": "Textured pixie",
+    "eye": [
+      0,
+      0.02,
+      -0.095
+    ],
+    "triangles": 1012,
+    "bytes": 46228,
+    "atlas": "strand-atlas.png"
+  },
+  {
+    "id": "hc-slick-back",
+    "label": "Slick back",
+    "eye": [
+      0,
+      0.02,
+      -0.095
+    ],
+    "triangles": 1064,
+    "bytes": 44244,
+    "atlas": "strand-atlas.png"
+  },
+  {
+    "id": "hc-afro",
+    "label": "Natural afro",
+    "eye": [
+      0,
+      0.02,
+      -0.095
+    ],
+    "triangles": 3072,
+    "bytes": 130396,
+    "atlas": "strand-atlas.png"
+  },
+  {
+    "id": "hc-updo",
+    "label": "Soft updo",
+    "eye": [
+      0,
+      0.02,
+      -0.095
+    ],
+    "triangles": 1800,
+    "bytes": 76492,
+    "atlas": "strand-atlas.png"
+  }
+]
