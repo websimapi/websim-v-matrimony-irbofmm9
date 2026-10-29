@@ -214,7 +214,7 @@ No staff action is required at any step.
 - Batch 12 (coordinator, 28 Oct, `props-batch12.py`): reception entertainment (LOVE letters, lawn games, signature cocktail bar, sparkler station).
 - Batch 13 (coordinator, 28 Oct, `props-batch13.py`): sailcloth and clear-top tents, LED dance floor, grazing table, tall centrepiece, dove cage, hot-air balloon.
 - Batch 14 (coordinator, 28 Oct, `props-batch14.py`): ballroom and lakeside sets (crystal chandelier, marble column, mirror seating chart, grand staircase, marble floor, lake, dock, rowboat).
-- Desktop-link pose frames in `assets/native/pose-*.glb` (+ `pose-textures/`): baked by GPT Sol from the Rocketbox outfits (H5, `work/helper/pose-flipbook.py`).
+- Desktop-link pose frames in `assets/native/pose-*.glb` (+ `pose-textures/`): baked by GPT Sol from the Rocketbox outfits (H5, `work/helper/pose-flipbook.py`). H26 ceremony candidates (kneel, handsjoin, kiss) use the same MIT source assets and existing procedural browser poses; reproducible exports in `work/helper/h26-export.js` and `h26-bake.py`, staged under `work/helper/h26-candidate/` for coordinator review.
 - Prop PBR tiles: original procedural fabric weave, wood grain, stone, brushed metal and petal detail authored with Blender MCP; baking/export source `work/helper/props-pbr.py`.
 - Props in `assets/props` and 3D trees in `assets/trees3d`: generated for this project in Blender from code (`work/blender/props.py`, `trees.py`). Catalog thumbnails are rendered by the same scripts (`assets/catalog`).
 - HD textures in `assets/hd`: Poly Haven (CC0) for stone, walnut, planks, linen, parquet, satin and bark; ambientCG (CC0) Grass004 lawn.
@@ -233,3 +233,6 @@ Done in Oct 2026: native Vircadia domain, desktop bridge and desktop link script
 6. Real payments (Stripe) replacing the tip mock. The `payments` table already records the method.
 7. Recording / restream to YouTube for 100+ watchers.
 8. A stable public address for the desktop domain (named Cloudflare tunnel or hosted domain server).
+
+## Character creator (rebuilt 29 Oct)
+Every colour setting now works on every outfit: skin tone, eye colour, lipstick, eyeshadow, liner, blush, stubble, brow colour, hair colour on the outfit's painted hair, and clothing (jacket/top, NEW shirt or inner layer, trousers/skirt, shoes). The Face tab has real shape controls: face shape, jaw & chin, nose, mouth & lips, brows and ears; the Eyes tab has size, spacing, height, depth and tilt. Body tab: weight, muscle, chest, waist, hips, belly and glutes now reshape the body itself (not just stretch the clothes); height, legs, arms, neck and shoulders still set lengths. Accessories are fitted to each character's own ears, nose, eyes, skull, neck, chest and fingers (they follow face changes too), and earrings, rings and bracelets now work at all (they were silently dropped before). Still in progress: realistic hair that fits every head with cut and length controls.
